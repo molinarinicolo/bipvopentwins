@@ -3,6 +3,7 @@ import paho.mqtt.client as mqtt
 from influxdb import InfluxDBClient as InfluxDBClientV1
 import pandas as pd
 import json
+import time
 
 # MQTT info
 broker = "37.156.47.96"  # MQTT broker address
@@ -191,15 +192,16 @@ for measure in matchandgap_query.keys():
      query = matchandgap_query.get(measure)
      result_influx = influx_client.query(query)
      series_influx = list(result_influx.get_points())
-     series_influx[0]['time'] = (datetime.strptime(series_influx[0]['time'], '%Y-%m-%dT%H:%M:%SZ') + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
-     ditto_thing = matchandgap_things.get(measure)
+     if len(series_influx)>0:
+         series_influx[0]['time'] = (datetime.strptime(series_influx[0]['time'], '%Y-%m-%dT%H:%M:%SZ') + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+         ditto_thing = matchandgap_things.get(measure)
 
-     if ditto_thing in mppt_df['thing'].values:
-          mppt_df.loc[mppt_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
-     if ditto_thing in pyr_df['thing'].values:
-          pyr_df.loc[pyr_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
-     if ditto_thing in cell_df['thing'].values:
-          cell_df.loc[cell_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
+         if ditto_thing in mppt_df['thing'].values:
+              mppt_df.loc[mppt_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
+         if ditto_thing in pyr_df['thing'].values:
+              pyr_df.loc[pyr_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
+         if ditto_thing in cell_df['thing'].values:
+              cell_df.loc[cell_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
 
 #Sending data via MQTT
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -210,16 +212,19 @@ timestamp_obj = datetime.strptime(END_TS, "%Y-%m-%d %H:%M:%S")
 epoch_time = int(timestamp_obj.timestamp())*1000
 
 for index, mppt in mppt_df.iterrows():
-    msg = get_ditto_protocol_msg(mppt['thing'], get_ditto_protocol_value_mppt(epoch_time, mppt['Vm'], mppt['Im']))
-    client.publish(topic + namespace + "/"  +mppt['thing'], json.dumps(msg))
+    if mppt['Vm'] is not None or  mppt['Im'] is not None:
+        msg = get_ditto_protocol_msg(mppt['thing'], get_ditto_protocol_value_mppt(epoch_time, mppt['Vm'], mppt['Im']))
+        client.publish(topic + namespace + "/"  +mppt['thing'], json.dumps(msg))
 
 for index, pyr in pyr_df.iterrows():
-    msg = get_ditto_protocol_msg(pyr['thing'], get_ditto_protocol_value_pyr(epoch_time, pyr['Irradiance']))
-    client.publish(topic + namespace + "/" + pyr['thing'], json.dumps(msg))
+    if pyr['Irradiance'] is not None:
+        msg = get_ditto_protocol_msg(pyr['thing'], get_ditto_protocol_value_pyr(epoch_time, pyr['Irradiance']))
+        client.publish(topic + namespace + "/" + pyr['thing'], json.dumps(msg))
 
 for index, cell in cell_df.iterrows():
-    msg = get_ditto_protocol_msg_cell(cell['thing'], get_ditto_protocol_value_cell(epoch_time, cell['Tbd'], cell['Tbom'], cell['Tair']))
-    client.publish(topic + namespace + "/" + cell['thing'], str(msg))
+    if cell['Tbd'] is not None or cell['Tbom'] is not None or cell['Tair'] is not None:
+        msg = get_ditto_protocol_msg_cell(cell['thing'], get_ditto_protocol_value_cell(epoch_time, cell['Tbd'], cell['Tbom'], cell['Tair']))
+        client.publish(topic + namespace + "/" + cell['thing'], str(msg))
 
 print("Data published via MQTT")
 
