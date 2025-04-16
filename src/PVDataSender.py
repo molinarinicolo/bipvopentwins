@@ -38,7 +38,9 @@ matchandgap_query = {
      'TBOM_L5_LEFT_2':   "SELECT mean(\"2_4\") FROM ""data"" WHERE (""source"" = 'datexel_importer_BIPVdSHADE') AND time >= '"+START_TS+"' AND time < '"+END_TS+"'",
      'TBOM_L5_RIGHT_2':  "SELECT mean(\"3_1\") FROM ""data"" WHERE (""source"" = 'datexel_importer_BIPVdSHADE') AND time >= '"+START_TS+"' AND time < '"+END_TS+"'",
      'TAIR_L5_LEFT_3':   "SELECT mean(\"3_2\") FROM ""data"" WHERE (""source"" = 'datexel_importer_BIPVdSHADE') AND time >= '"+START_TS+"' AND time < '"+END_TS+"'",
-     'TAIR_L5_RIGHT_3':  "SELECT mean(\"3_3\") FROM ""data"" WHERE (""source"" = 'datexel_importer_BIPVdSHADE') AND time >= '"+START_TS+"' AND time < '"+END_TS+"'"
+     'TAIR_L5_RIGHT_3':  "SELECT mean(\"3_3\") FROM ""data"" WHERE (""source"" = 'datexel_importer_BIPVdSHADE') AND time >= '"+START_TS+"' AND time < '"+END_TS+"'",
+     'GHI_GP':           "SELECT mean(""Raw_GlobalHor_Irr"") / 0.009004 FROM ""meteo"" WHERE time >= '"+START_TS+"' AND time < '"+END_TS+"'",
+     'DHI_GP':           "SELECT mean(""Raw_Diff_Irr"") / 0.008841 FROM ""meteo"" WHERE time >= '"+START_TS+"' AND time < '"+END_TS+"'"
 }
 
 matchandgap_things = {
@@ -61,27 +63,30 @@ matchandgap_things = {
      'TBOM_L5_LEFT_2':   "L5_left_2",
      'TBOM_L5_RIGHT_2':  "L5_right_2",
      'TAIR_L5_LEFT_3':   "L5_left_3",
-     'TAIR_L5_RIGHT_3':  "L5_right_3"
+     'TAIR_L5_RIGHT_3':  "L5_right_3",
+     'GHI_GP':           "GlobalPyranometer1",
+     'DHI_GP':           "GlobalPyranometer1"
 }
 
 matchandgap_things_types = {
-     "MPPT246":     "MPPT",
-     "MPPT286":     "MPPT",
-     "MPPT287":     "MPPT",
-     "Pyr1":        "PYR",
-     "Pyr2":        "PYR",
-     "Pyr3":        "PYR",
-     "L2_left_1":   "CELL",
-     "L2_right_1":  "CELL",
-     "L2_left_2":   "CELL",
-     "L2_right_2":  "CELL",
-     "L2_left_3":   "CELL",
-     "L2_right_3":  "CELL",
-     "L5_left_1":   "CELL",
-     "L5_left_2":   "CELL",
-     "L5_right_2":  "CELL",
-     "L5_left_3":   "CELL",
-     "L5_right_3":  "CELL"
+     "MPPT246":             "MPPT",
+     "MPPT286":             "MPPT",
+     "MPPT287":             "MPPT",
+     "Pyr1":                "PYR",
+     "Pyr2":                "PYR",
+     "Pyr3":                "PYR",
+     "L2_left_1":           "CELL",
+     "L2_right_1":          "CELL",
+     "L2_left_2":           "CELL",
+     "L2_right_2":          "CELL",
+     "L2_left_3":           "CELL",
+     "L2_right_3":          "CELL",
+     "L5_left_1":           "CELL",
+     "L5_left_2":           "CELL",
+     "L5_right_2":          "CELL",
+     "L5_left_3":           "CELL",
+     "L5_right_3":          "CELL",
+     "GlobalPyranometer1":  "GlobalPyranometer"
 }
 
 matchandgap_attributes = {
@@ -104,7 +109,9 @@ matchandgap_attributes = {
      'TBOM_L5_LEFT_2':   "Tbom",
      'TBOM_L5_RIGHT_2':  "Tbom",
      'TAIR_L5_LEFT_3':   "Tair",
-     'TAIR_L5_RIGHT_3':  "Tair"
+     'TAIR_L5_RIGHT_3':  "Tair",
+     'GHI_GP':           "GHI",
+     'DHI_GP':           "DHI"
 }
 
 # MQTT connection
@@ -153,6 +160,22 @@ def get_ditto_protocol_value_pyr(ts, irradiance):
         }
     }
 
+def get_ditto_protocol_value_global_pyr(ts, ghi, dhi):
+    return {
+        "GHI": {
+            "properties": {
+                "value": ghi,
+                "time": ts
+            }
+        },
+        "DHI": {
+            "properties": {
+                "value": dhi,
+                "time": ts
+            }
+        }
+    }
+
 def get_ditto_protocol_value_cell(ts, tbd, tbom, tair):
      json_val = '{'
      if tbd is not None:
@@ -176,6 +199,7 @@ influx_client = InfluxDBClientV1('199.247.12.243', 8086, 'admin', 'pTno2eHTxLmW*
 mppt_df = pd.DataFrame(columns=['thing','Vm', 'Im'])
 pyr_df = pd.DataFrame(columns=['thing', 'Irradiance'])
 cell_df = pd.DataFrame(columns=['thing', 'Tbom', 'Tbd', 'Tair'])
+g_pyr_df = pd.DataFrame(columns=['thing', 'GHI', 'DHI'])
 
 for thing in matchandgap_things_types.keys():
 
@@ -185,6 +209,8 @@ for thing in matchandgap_things_types.keys():
           pyr_df.loc[len(pyr_df)] = [thing, None]
      if matchandgap_things_types.get(thing) == "CELL":
           cell_df.loc[len(cell_df)] = [thing, None, None, None]
+     if matchandgap_things_types.get(thing) == "GlobalPyranometer":
+          g_pyr_df.loc[len(g_pyr_df)] = [thing, None, None]
 
 #Extracting data from InfluxDB
 for measure in matchandgap_query.keys():
@@ -202,6 +228,8 @@ for measure in matchandgap_query.keys():
               pyr_df.loc[pyr_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
          if ditto_thing in cell_df['thing'].values:
               cell_df.loc[cell_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
+         if ditto_thing in g_pyr_df['thing'].values:
+             g_pyr_df.loc[g_pyr_df.thing == ditto_thing, matchandgap_attributes.get(measure)] = series_influx[0]['mean']
 
 #Sending data via MQTT
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -225,6 +253,11 @@ for index, cell in cell_df.iterrows():
     if cell['Tbd'] is not None or cell['Tbom'] is not None or cell['Tair'] is not None:
         msg = get_ditto_protocol_msg_cell(cell['thing'], get_ditto_protocol_value_cell(epoch_time, cell['Tbd'], cell['Tbom'], cell['Tair']))
         client.publish(topic + namespace + "/" + cell['thing'], str(msg))
+
+for index, gpyr in g_pyr_df.iterrows():
+    if gpyr['GHI'] is not None or  gpyr['DHI'] is not None:
+        msg = get_ditto_protocol_msg(gpyr['thing'], get_ditto_protocol_value_global_pyr(epoch_time, gpyr['GHI'], gpyr['DHI']))
+        client.publish(topic + namespace + "/"  +gpyr['thing'], json.dumps(msg))
 
 print("Data published via MQTT")
 
