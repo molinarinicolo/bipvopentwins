@@ -1,0 +1,44 @@
+# ---- builder ----
+FROM python:3.13-slim AS builder
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+# Build essentials for any wheels (uvloop, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl build-essential \
+    && rm -rf /var/lib/apt/lists/*
+# Use Poetry to resolve & export pinned requirements
+RUN pip install --no-cache-dir poetry==1.8.3
+WORKDIR /build
+COPY /pyproject.toml /poetry.lock* ./
+# If no lock exists, generate it; then export fully pinned requirements
+RUN poetry lock --no-interaction || true && poetry export -f requirements.txt --output requirements.txt --without-hashes
+# Bring in the app last to maximize layer cache
+COPY src/bipv_api ./app
+
+# ---- runtime ----
+FROM python:3.13-slim AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8001 \
+    APP_VERSION=dev
+# Create a non-root user
+RUN useradd -m -u 10001 appuser
+WORKDIR /app
+# Minimal OS deps (curl for HEALTHCHECK)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl \
+    && rm -rf /var/lib/apt/lists/*
+# Install only runtime deps
+COPY --from=builder /build/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+# Copy the app code from the builder
+COPY --from=builder /build/app ./app
+# Lock down code dir (helps with readOnlyRootFilesystem later)
+RUN chmod -R a-w /app
+USER 10001
+# Container-level healthcheck
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD curl -fsS http://localhost:${PORT}/healthz || exit 1
+EXPOSE 8001
+# Launch Uvicorn with bipv_api.py as the entry point
+CMD ["uvicorn", "app.bipv_api:app", "--host", "0.0.0.0", "--port", "8001"]
