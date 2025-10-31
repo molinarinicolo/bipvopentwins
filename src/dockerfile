@@ -13,7 +13,7 @@ COPY /pyproject.toml /poetry.lock* ./
 # If no lock exists, generate it; then export fully pinned requirements
 RUN poetry lock --no-interaction || true && poetry export -f requirements.txt --output requirements.txt --without-hashes
 # Bring in the app last to maximize layer cache
-COPY src/bipv_api ./app
+COPY . ./app
 
 # ---- runtime ----
 FROM python:3.13-slim AS runtime
