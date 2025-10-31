@@ -47,10 +47,10 @@ def get_occupancy_sample(data: PowerRequest):
         prediction = model.predict(model_input)
 
         model_output = [
-            [
-                sample['time'],
-                prediction[x]
-            ]
+            {
+                "time": sample['time'],
+                "power": prediction[x]
+            }
             for x, sample in enumerate(series_opt)
         ]
 
