@@ -54,7 +54,7 @@ def get_occupancy_sample(data: PowerRequest):
             for x, sample in enumerate(series_opt)
         ]
 
-        return {model_output}
+        return {'Power': model_output}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error occurred: {e}")
